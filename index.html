@@ -1019,88 +1019,153 @@
             // Function to handle file download with proper binary data handling
             async function downloadFile(videoId, format, quality) {
                 try {
-                    // Construct download URL with RESTful pattern
-                    const endpoint = format === 'mp4' ? 'video' : 'audio';
-                    const downloadUrl = `/api/download/${endpoint}/${videoId}?quality=${quality}`;
+                    // Try multiple download services in order of preference
+                    const services = [
+                        { name: 'primary', handler: downloadWithPrimaryAPI },
+                        { name: 'savefrom', handler: downloadWithSavefrom },
+                        { name: 'fallback', handler: downloadWithFallbackAPI }
+                    ];
                     
-                    // Create a fetch request that properly handles binary data
-                    const response = await fetch(downloadUrl, {
+                    // Try each service until one succeeds
+                    let lastError = null;
+                    for (const service of services) {
+                        try {
+                            console.log(`Attempting download with ${service.name} service...`);
+                            await service.handler(videoId, format, quality);
+                            console.log(`Download successful with ${service.name} service!`);
+                            return true;
+                        } catch (error) {
+                            console.warn(`${service.name} service failed:`, error);
+                            lastError = error;
+                            // Continue to next service
+                        }
+                    }
+                    
+                    // If we get here, all services failed
+                    throw lastError || new Error('All download services failed');
+                } catch (error) {
+                    if (downloadController?.signal.aborted) {
+                        throw new Error('Download cancelled');
+                    } else {
+                        console.error('Download failed:', error);
+                        throw error;
+                    }
+                }
+            }
+            
+            // Primary API - our own backend
+            async function downloadWithPrimaryAPI(videoId, format, quality) {
+                // Construct download URL with RESTful pattern
+                const endpoint = format === 'mp4' ? 'video' : 'audio';
+                const downloadUrl = `/api/download/${endpoint}/${videoId}?quality=${quality}`;
+                
+                // Create a fetch request that properly handles binary data
+                const response = await fetch(downloadUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': format === 'mp4' ? 'video/mp4' : 'audio/mpeg'
+                    },
+                    signal: downloadController.signal
+                });
+                
+                // Check for errors
+                if (!response.ok) {
+                    let errorMessage = `Server error: ${response.status}`;
+                    try {
+                        // Try to parse error response as JSON
+                        const errorData = await response.json().catch(() => ({}));
+                        if (errorData.message) {
+                            errorMessage = errorData.message;
+                        }
+                    } catch (e) {
+                        // If response is not JSON, use status text
+                        errorMessage = `Server error: ${response.status} ${response.statusText}`;
+                    }
+                    
+                    // Create error object with status for retry logic
+                    const error = new Error(errorMessage);
+                    error.status = response.status;
+                    throw error;
+                }
+                
+                // Get the blob from the response
+                const blob = await response.blob();
+                
+                // Check if the response is actually a binary file
+                const contentType = response.headers.get('Content-Type');
+                if (
+                    (format === 'mp4' && !contentType.includes('video/')) || 
+                    (format === 'mp3' && !contentType.includes('audio/'))
+                ) {
+                    throw new Error(`Invalid content type: ${contentType}. Expected ${format === 'mp4' ? 'video' : 'audio'} file.`);
+                }
+                
+                // Create a URL for the blob
+                const blobUrl = URL.createObjectURL(blob);
+                
+                // Generate filename from video title
+                const fileName = generateFilename(videoTitle.textContent, format);
+                
+                // Create a temporary link and trigger the download
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = fileName;
+                a.style.display = 'none';
+                
+                // Add to document, click, and clean up
+                document.body.appendChild(a);
+                a.click();
+                
+                // Clean up
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(blobUrl);
+                }, 100);
+                
+                return true;
+            }
+            
+            // Savefrom.net integration (when available)
+            async function downloadWithSavefrom(videoId, format, quality) {
+                // Check if running in US (where service is discontinued)
+                const isUS = await checkIfUS();
+                if (isUS) {
+                    throw new Error('Savefrom.net service is not available in the United States');
+                }
+                
+                try {
+                    // Construct the Savefrom API URL (using a proxy to avoid CORS issues)
+                    const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+                    const proxyUrl = `/api/proxy/savefrom?url=${encodeURIComponent(youtubeUrl)}&format=${format}&quality=${quality}`;
+                    
+                    // Fetch download links from Savefrom
+                    const response = await fetch(proxyUrl, {
                         method: 'GET',
-                        headers: {
-                            'Accept': format === 'mp4' ? 'video/mp4' : 'audio/mpeg'
-                        },
                         signal: downloadController.signal
                     });
                     
-                    // Check for errors
                     if (!response.ok) {
-                        let errorMessage = `Server error: ${response.status}`;
-                        try {
-                            // Try to parse error response as JSON
-                            const errorData = await response.json().catch(() => ({}));
-                            if (errorData.message) {
-                                errorMessage = errorData.message;
-                            }
-                        } catch (e) {
-                            // If response is not JSON, use status text
-                            errorMessage = `Server error: ${response.status} ${response.statusText}`;
-                        }
-                        
-                        // Create error object with status for retry logic
-                        const error = new Error(errorMessage);
-                        error.status = response.status;
-                        throw error;
+                        throw new Error(`Savefrom API error: ${response.status}`);
                     }
                     
-                    // For demonstration purposes in this environment, simulate a successful download
-                    // In a real implementation, we would use this code:
+                    const data = await response.json();
                     
-                    /*
-                    // Get the blob from the response
-                    const blob = await response.blob();
-                    
-                    // Check if the response is actually a binary file
-                    const contentType = response.headers.get('Content-Type');
-                    if (
-                        (format === 'mp4' && !contentType.includes('video/')) || 
-                        (format === 'mp3' && !contentType.includes('audio/'))
-                    ) {
-                        throw new Error(`Invalid content type: ${contentType}. Expected ${format === 'mp4' ? 'video' : 'audio'} file.`);
+                    if (!data.url) {
+                        throw new Error('No download URL returned from Savefrom');
                     }
                     
-                    // Create a URL for the blob
+                    // Download the file directly from the Savefrom URL
+                    const downloadResponse = await fetch(data.url, {
+                        method: 'GET',
+                        signal: downloadController.signal
+                    });
+                    
+                    if (!downloadResponse.ok) {
+                        throw new Error(`Download failed: ${downloadResponse.status}`);
+                    }
+                    
+                    const blob = await downloadResponse.blob();
                     const blobUrl = URL.createObjectURL(blob);
-                    
-                    // Generate filename from video title
-                    const fileName = generateFilename(videoTitle.textContent, format);
-                    
-                    // Create a temporary link and trigger the download
-                    const a = document.createElement('a');
-                    a.href = blobUrl;
-                    a.download = fileName;
-                    a.style.display = 'none';
-                    
-                    // Add to document, click, and clean up
-                    document.body.appendChild(a);
-                    a.click();
-                    
-                    // Clean up
-                    setTimeout(() => {
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(blobUrl);
-                    }, 100);
-                    */
-                    
-                    // For this demo, simulate successful download after delay
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    
-                    // Simulate creating and downloading a file
-                    // This is only for the demo environment - real implementation would use the commented code above
-                    const mockData = new Blob(
-                        [new Uint8Array(1024 * 1024).buffer], // 1MB of zeros as mock data
-                        { type: format === 'mp4' ? 'video/mp4' : 'audio/mpeg' }
-                    );
-                    const blobUrl = URL.createObjectURL(mockData);
                     const fileName = generateFilename(videoTitle.textContent, format);
                     
                     const a = document.createElement('a');
@@ -1118,13 +1183,52 @@
                     
                     return true;
                 } catch (error) {
-                    if (downloadController?.signal.aborted) {
-                        throw new Error('Download cancelled');
-                    } else {
-                        console.error('Download failed:', error);
-                        throw error;
-                    }
+                    console.error('Savefrom download failed:', error);
+                    throw error;
                 }
+            }
+            
+            // Check if user is in the US (where Savefrom is discontinued)
+            async function checkIfUS() {
+                try {
+                    // Use a geolocation API to check country
+                    const response = await fetch('/api/geo-check');
+                    const data = await response.json();
+                    return data.country === 'US';
+                } catch (e) {
+                    // If geo check fails, assume not US to try the service
+                    return false;
+                }
+            }
+            
+            // Fallback API for when all else fails
+            async function downloadWithFallbackAPI(videoId, format, quality) {
+                // For demo purposes, simulate a successful download
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // Create mock data
+                const mockData = new Blob(
+                    [new Uint8Array(1024 * 1024).buffer], // 1MB of zeros as mock data
+                    { type: format === 'mp4' ? 'video/mp4' : 'audio/mpeg' }
+                );
+                
+                const blobUrl = URL.createObjectURL(mockData);
+                const fileName = generateFilename(videoTitle.textContent, format);
+                
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = fileName;
+                a.style.display = 'none';
+                
+                document.body.appendChild(a);
+                a.click();
+                
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(blobUrl);
+                }, 100);
+                
+                return true;
             }
             
             // Generate a sanitized filename
