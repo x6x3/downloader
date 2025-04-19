@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ali AL-Sharif - YouTube Downloader</title>
+    <title>@2623 - YouTube Downloader</title>
     <meta name="description" content="Download YouTube videos as MP4 or MP3 files with our modern, fast converter">
     <link rel="stylesheet" href="css/styles.css">
     <!-- Preload critical assets -->
@@ -305,7 +305,7 @@
     <header class="header container">
         <div class="logo">
             <a href="https://www.instagram.com/2623/" target="_blank" style="text-decoration: none; color: inherit; display: flex; align-items: center;">
-                <h1>Ali AL-Sharif</h1>
+                <h1><span>@</span>2623</h1>
             </a>
         </div>
         <button id="highContrastToggle" class="btn" style="background-color: transparent; color: var(--color-primary-brown); border: 1px solid var(--color-primary-brown); padding: 6px 12px;">
@@ -409,7 +409,7 @@
     </div>
 
     <footer class="footer container">
-        <p>© 2025 Ali AL-Sharif. All rights reserved.</p>
+        <p>© 2025 @2623. All rights reserved.</p>
         <div class="footer-links">
             <a href="/terms">Terms of Service</a> | 
             <a href="/privacy">Privacy Policy</a> | 
@@ -549,44 +549,122 @@
             // URL validation and preview
             urlInput.addEventListener('input', debounce(validateAndPreview, 500));
             
+            // More comprehensive YouTube URL parser
+            function extractVideoId(url) {
+                if (!url) return null;
+                
+                // Handle various YouTube URL formats:
+                // - Standard: https://www.youtube.com/watch?v=VIDEO_ID
+                // - Short: https://youtu.be/VIDEO_ID
+                // - Shorts: https://www.youtube.com/shorts/VIDEO_ID
+                // - Embed: https://www.youtube.com/embed/VIDEO_ID
+                // - Mobile: https://m.youtube.com/watch?v=VIDEO_ID
+                // - With timestamps: ?t=123 or &t=123
+                // - With sharing params: ?si=abc123
+                // - With playlists: &list=PL123
+                
+                let patterns = [
+                    // youtu.be short links
+                    /^(?:https?:\/\/)?(?:www\.)?youtu\.be\/([a-zA-Z0-9_-]{11})(?:\?|&|#|$)/,
+                    // youtube.com/watch?v= standard links
+                    /^(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com\/watch\?(?:.*&)?v=([a-zA-Z0-9_-]{11})(?:&|$|\?|#)/,
+                    // youtube.com/v/ old style
+                    /^(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com\/v\/([a-zA-Z0-9_-]{11})(?:\?|&|$|#)/,
+                    // youtube.com/embed/ embeds
+                    /^(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]{11})(?:\?|&|$|#)/,
+                    // youtube.com/shorts/ shorts format
+                    /^(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})(?:\?|&|$|#)/,
+                    // Handle URLs without query parameters
+                    /^(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com\/watch\/([a-zA-Z0-9_-]{11})(?:\?|&|$|#)/,
+                    // Handle YouTube video IDs directly
+                    /^([a-zA-Z0-9_-]{11})$/
+                ];
+                
+                for (const pattern of patterns) {
+                    const match = url.match(pattern);
+                    if (match && match[1]) {
+                        return match[1];
+                    }
+                }
+                
+                return null;
+            }
+            
             async function validateAndPreview() {
                 const url = urlInput.value.trim();
-                // More robust YouTube URL validation
-                const youtubeRegex = /^(https?:\/\/)?(www\.|m\.)?(youtube\.com|youtu\.be)\/(watch\?v=|embed\/|v\/|shorts\/)?([a-zA-Z0-9_-]{11})(&.*)?$/;
-                const match = url.match(youtubeRegex);
+                const videoId = extractVideoId(url);
                 
                 resetPreview();
                 
-                if (match && match[5]) {
+                if (!url.length) {
+                    return;
+                }
+                
+                if (videoId) {
                     // Valid YouTube URL with video ID
-                    const videoId = match[5];
-                    
                     try {
                         // Show loading state
                         videoPreview.classList.add('visible');
-                        thumbnailPreview.src = 'assets/loading.gif'; // You'll need to create this
+                        thumbnailPreview.src = 'assets/loading.gif';
                         videoTitle.textContent = 'Loading...';
                         videoDuration.textContent = '...';
                         
                         // Fetch video info from server API
                         const info = await fetchVideoInfo(videoId);
                         
-                        // Show preview
+                        // Show preview with expanded metadata
                         thumbnailPreview.src = info.thumbnail;
+                        thumbnailPreview.alt = `Thumbnail for ${info.title}`;
                         videoTitle.textContent = info.title;
                         videoDuration.textContent = formatDuration(info.duration);
+                        
+                        // Add upload date if available
+                        if (info.uploadDate) {
+                            const uploadDateElement = document.getElementById('uploadDate');
+                            if (!uploadDateElement) {
+                                const dateElem = document.createElement('p');
+                                dateElem.id = 'uploadDate';
+                                dateElem.style.fontSize = '0.85rem';
+                                dateElem.style.opacity = '0.8';
+                                dateElem.textContent = `Uploaded: ${formatDate(info.uploadDate)}`;
+                                videoTitle.parentNode.insertBefore(dateElem, videoDuration.parentNode);
+                            } else {
+                                uploadDateElement.textContent = `Uploaded: ${formatDate(info.uploadDate)}`;
+                            }
+                        }
+                        
+                        // Show preview container
                         videoPreview.classList.add('visible');
                         
                         // Enable download button
                         downloadBtn.disabled = false;
                         downloadBtn.classList.add('visible');
+                        downloadBtn.setAttribute('aria-label', `Download ${info.title} as ${currentFormat.toUpperCase()}`);
                     } catch (error) {
                         console.error('Error fetching video info:', error);
                         showError(error.message || 'Could not fetch video information. Please check the URL.');
                     }
-                } else if (url.length > 0) {
-                    // Invalid YouTube URL
+                } else if (url.includes('youtube') || url.includes('youtu.be')) {
+                    // YouTube domain but invalid format
+                    showError('Could not extract video ID. Please check the URL format.');
+                } else {
+                    // Not a YouTube URL
                     showError('Please enter a valid YouTube URL');
+                }
+            }
+            
+            function formatDate(dateString) {
+                if (!dateString) return '';
+                
+                try {
+                    const date = new Date(dateString);
+                    return date.toLocaleDateString(undefined, { 
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric'
+                    });
+                } catch (e) {
+                    return dateString;
                 }
             }
             
@@ -638,8 +716,19 @@
                 }
             }
             
-            // API function to fetch video info
+            // API function to fetch video info with caching
+            const metadataCache = new Map();
+            const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
+            
             async function fetchVideoInfo(videoId) {
+                // Check cache first
+                const now = Date.now();
+                const cached = metadataCache.get(videoId);
+                
+                if (cached && (now - cached.timestamp < CACHE_TTL)) {
+                    return cached.data;
+                }
+                
                 try {
                     const apiUrl = `/api/info?videoId=${encodeURIComponent(videoId)}`;
                     const response = await fetch(apiUrl);
@@ -655,18 +744,33 @@
                         throw new Error(data.error);
                     }
                     
+                    // Cache the result
+                    metadataCache.set(videoId, {
+                        timestamp: now,
+                        data: data
+                    });
+                    
                     return data;
                 } catch (error) {
                     // For demo purposes, return mock data if API fails
                     console.warn('API call failed, using mock data');
                     
                     // In production, we would NOT have this fallback
-                    return {
+                    const mockData = {
                         videoId: videoId,
                         title: 'Sample YouTube Video',
                         thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-                        duration: 630 // 10:30 in seconds
+                        duration: 630, // 10:30 in seconds
+                        uploadDate: new Date().toISOString().slice(0, 10)
                     };
+                    
+                    // Cache even mock data to prevent repeated attempts
+                    metadataCache.set(videoId, {
+                        timestamp: now,
+                        data: mockData
+                    });
+                    
+                    return mockData;
                 }
             }
             
@@ -696,7 +800,7 @@
                 resetDownloadState();
             }
             
-            // Confirm download
+            // Confirm download with improved error handling
             confirmDownload.addEventListener('click', async () => {
                 const url = urlInput.value.trim();
                 const format = currentFormat;
@@ -729,6 +833,9 @@
                 downloadController = new AbortController();
                 
                 try {
+                    // Log download attempt (would send to server in production)
+                    console.info(`Download attempt: videoId=${videoId}, format=${format}, quality=${quality}`);
+                    
                     // Start progress updates via event source
                     startProgressUpdates(videoId, format);
                     
@@ -738,22 +845,23 @@
                     console.error('Download error:', error);
                     
                     if (error.name !== 'AbortError') {
-                        alert('Download failed: ' + (error.message || 'Unknown error'));
+                        const errorMessage = error.message || 'Unknown error';
+                        alert(`Download failed: ${errorMessage}\n\nPlease check your network connection and try again.`);
+                        
+                        // Log error (would send to server in production)
+                        console.error(`Download failed: videoId=${videoId}, format=${format}, error=${errorMessage}`);
                     }
                 } finally {
                     // Complete and reset
                     if (downloadController) { // If not aborted
                         progressBar.style.width = '100%';
                         setTimeout(resetDownloadState, 1000);
+                        
+                        // Log success (would send to server in production)
+                        console.info(`Download completed: videoId=${videoId}, format=${format}`);
                     }
                 }
             });
-            
-            function extractVideoId(url) {
-                const youtubeRegex = /^(https?:\/\/)?(www\.|m\.)?(youtube\.com|youtu\.be)\/(watch\?v=|embed\/|v\/|shorts\/)?([a-zA-Z0-9_-]{11})(&.*)?$/;
-                const match = url.match(youtubeRegex);
-                return match && match[5] ? match[5] : null;
-            }
             
             // Connect to server-sent events for real progress updates
             function startProgressUpdates(videoId, format) {
