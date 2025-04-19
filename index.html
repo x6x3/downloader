@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@2623 - YouTube Downloader</title>
+    <title>Ali AL-Sharif - YouTube Downloader</title>
     <meta name="description" content="Download YouTube videos as MP4 or MP3 files with our modern, fast converter">
     <link rel="stylesheet" href="css/styles.css">
     <!-- Preload critical assets -->
@@ -304,7 +304,9 @@
     
     <header class="header container">
         <div class="logo">
-            <h1><span>@</span>2623</h1>
+            <a href="https://www.instagram.com/2623/" target="_blank" style="text-decoration: none; color: inherit; display: flex; align-items: center;">
+                <h1>Ali AL-Sharif</h1>
+            </a>
         </div>
         <button id="highContrastToggle" class="btn" style="background-color: transparent; color: var(--color-primary-brown); border: 1px solid var(--color-primary-brown); padding: 6px 12px;">
             High Contrast
@@ -407,7 +409,7 @@
     </div>
 
     <footer class="footer container">
-        <p>© 2023 @2623. All rights reserved.</p>
+        <p>© 2025 Ali AL-Sharif. All rights reserved.</p>
         <div class="footer-links">
             <a href="/terms">Terms of Service</a> | 
             <a href="/privacy">Privacy Policy</a> | 
@@ -439,6 +441,7 @@
             
             let currentFormat = 'mp4';
             let downloadController = null;
+            let eventSource = null;
             
             // Initialize background particles if animations are enabled
             if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && 
@@ -548,17 +551,30 @@
             
             async function validateAndPreview() {
                 const url = urlInput.value.trim();
-                const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;
+                // More robust YouTube URL validation
+                const youtubeRegex = /^(https?:\/\/)?(www\.|m\.)?(youtube\.com|youtu\.be)\/(watch\?v=|embed\/|v\/|shorts\/)?([a-zA-Z0-9_-]{11})(&.*)?$/;
+                const match = url.match(youtubeRegex);
                 
-                if (youtubeRegex.test(url)) {
+                resetPreview();
+                
+                if (match && match[5]) {
+                    // Valid YouTube URL with video ID
+                    const videoId = match[5];
+                    
                     try {
+                        // Show loading state
+                        videoPreview.classList.add('visible');
+                        thumbnailPreview.src = 'assets/loading.gif'; // You'll need to create this
+                        videoTitle.textContent = 'Loading...';
+                        videoDuration.textContent = '...';
+                        
                         // Fetch video info from server API
-                        const info = await fetchVideoInfo(url);
+                        const info = await fetchVideoInfo(videoId);
                         
                         // Show preview
                         thumbnailPreview.src = info.thumbnail;
                         videoTitle.textContent = info.title;
-                        videoDuration.textContent = info.duration;
+                        videoDuration.textContent = formatDuration(info.duration);
                         videoPreview.classList.add('visible');
                         
                         // Enable download button
@@ -566,27 +582,71 @@
                         downloadBtn.classList.add('visible');
                     } catch (error) {
                         console.error('Error fetching video info:', error);
-                        videoPreview.classList.remove('visible');
-                        downloadBtn.disabled = true;
-                        downloadBtn.classList.remove('visible');
-                        
-                        alert('Error: ' + (error.message || 'Could not fetch video information. Please check the URL.'));
+                        showError(error.message || 'Could not fetch video information. Please check the URL.');
                     }
+                } else if (url.length > 0) {
+                    // Invalid YouTube URL
+                    showError('Please enter a valid YouTube URL');
+                }
+            }
+            
+            function showError(message) {
+                videoPreview.classList.remove('visible');
+                downloadBtn.disabled = true;
+                downloadBtn.classList.remove('visible');
+                
+                // Create error message if it doesn't exist
+                let errorElement = document.getElementById('urlError');
+                if (!errorElement) {
+                    errorElement = document.createElement('div');
+                    errorElement.id = 'urlError';
+                    errorElement.style.color = 'var(--color-error)';
+                    errorElement.style.fontSize = '0.875rem';
+                    errorElement.style.marginTop = '0.5rem';
+                    urlInput.parentNode.appendChild(errorElement);
+                }
+                
+                errorElement.textContent = message;
+                errorElement.style.display = 'block';
+                
+                // Add error styling to input
+                urlInput.style.borderColor = 'var(--color-error)';
+            }
+            
+            function resetPreview() {
+                // Hide error message if exists
+                const errorElement = document.getElementById('urlError');
+                if (errorElement) {
+                    errorElement.style.display = 'none';
+                }
+                
+                // Reset input styling
+                urlInput.style.borderColor = '';
+            }
+            
+            function formatDuration(seconds) {
+                if (!seconds || isNaN(seconds)) return '00:00';
+                
+                const hrs = Math.floor(seconds / 3600);
+                const mins = Math.floor((seconds % 3600) / 60);
+                const secs = Math.floor(seconds % 60);
+                
+                if (hrs > 0) {
+                    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
                 } else {
-                    videoPreview.classList.remove('visible');
-                    downloadBtn.disabled = true;
-                    downloadBtn.classList.remove('visible');
+                    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
                 }
             }
             
             // API function to fetch video info
-            async function fetchVideoInfo(url) {
-                // In a real implementation, this would be an API call to your backend
+            async function fetchVideoInfo(videoId) {
                 try {
-                    const response = await fetch(`/api/info?url=${encodeURIComponent(url)}`);
+                    const apiUrl = `/api/info?videoId=${encodeURIComponent(videoId)}`;
+                    const response = await fetch(apiUrl);
                     
                     if (!response.ok) {
-                        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.message || `Server returned ${response.status}: ${response.statusText}`);
                     }
                     
                     const data = await response.json();
@@ -597,18 +657,16 @@
                     
                     return data;
                 } catch (error) {
-                    // For demo purposes, return mock data
+                    // For demo purposes, return mock data if API fails
                     console.warn('API call failed, using mock data');
                     
-                    if (url.includes('youtube.com') || url.includes('youtu.be')) {
-                        return {
-                            title: 'Sample YouTube Video',
-                            thumbnail: 'https://via.placeholder.com/480x360',
-                            duration: '10:30'
-                        };
-                    } else {
-                        throw new Error('Invalid YouTube URL');
-                    }
+                    // In production, we would NOT have this fallback
+                    return {
+                        videoId: videoId,
+                        title: 'Sample YouTube Video',
+                        thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+                        duration: 630 // 10:30 in seconds
+                    };
                 }
             }
             
@@ -621,19 +679,35 @@
             // Cancel download
             cancelDownload.addEventListener('click', () => {
                 formatModal.classList.remove('visible');
-                
+                abortDownload();
+            });
+            
+            function abortDownload() {
                 if (downloadController) {
                     downloadController.abort();
                     downloadController = null;
                 }
                 
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+                
                 resetDownloadState();
-            });
+            }
             
             // Confirm download
             confirmDownload.addEventListener('click', async () => {
                 const url = urlInput.value.trim();
                 const format = currentFormat;
+                const videoId = extractVideoId(url);
+                
+                if (!videoId) {
+                    alert('Invalid YouTube URL. Please enter a valid URL.');
+                    formatModal.classList.remove('visible');
+                    return;
+                }
+                
                 let quality;
                 
                 if (format === 'mp4') {
@@ -656,26 +730,73 @@
                 
                 try {
                     // Start progress updates via event source
-                    startProgressUpdates(url);
+                    startProgressUpdates(videoId, format);
                     
                     // Initiate download
-                    await downloadFile(url, format, quality);
-                    
-                    // Complete
-                    progressBar.style.width = '100%';
-                    setTimeout(resetDownloadState, 1000);
+                    await downloadFile(videoId, format, quality);
                 } catch (error) {
                     console.error('Download error:', error);
                     
                     if (error.name !== 'AbortError') {
                         alert('Download failed: ' + (error.message || 'Unknown error'));
-                        resetDownloadState();
+                    }
+                } finally {
+                    // Complete and reset
+                    if (downloadController) { // If not aborted
+                        progressBar.style.width = '100%';
+                        setTimeout(resetDownloadState, 1000);
                     }
                 }
             });
             
-            // Update progress bar (simulated for demo)
-            function startProgressUpdates(url) {
+            function extractVideoId(url) {
+                const youtubeRegex = /^(https?:\/\/)?(www\.|m\.)?(youtube\.com|youtu\.be)\/(watch\?v=|embed\/|v\/|shorts\/)?([a-zA-Z0-9_-]{11})(&.*)?$/;
+                const match = url.match(youtubeRegex);
+                return match && match[5] ? match[5] : null;
+            }
+            
+            // Connect to server-sent events for real progress updates
+            function startProgressUpdates(videoId, format) {
+                // Close any existing connection
+                if (eventSource) {
+                    eventSource.close();
+                }
+                
+                const progressEndpoint = `/api/progress/${format}/${videoId}`;
+                
+                try {
+                    eventSource = new EventSource(progressEndpoint);
+                    
+                    eventSource.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        if (data.progress !== undefined) {
+                            progressBar.style.width = `${Math.min(data.progress, 95)}%`;
+                        }
+                    };
+                    
+                    eventSource.onerror = () => {
+                        eventSource.close();
+                        eventSource = null;
+                        
+                        // Fallback to simulated progress for demo
+                        simulateProgressUpdates();
+                    };
+                    
+                    // Cleanup when download completes or aborts
+                    downloadController.signal.addEventListener('abort', () => {
+                        if (eventSource) {
+                            eventSource.close();
+                            eventSource = null;
+                        }
+                    });
+                } catch (error) {
+                    console.warn('SSE not supported, using simulated progress');
+                    simulateProgressUpdates();
+                }
+            }
+            
+            // Fallback progress simulation for demo or when SSE fails
+            function simulateProgressUpdates() {
                 let progress = 0;
                 const interval = setInterval(() => {
                     if (progress >= 100 || !downloadController) {
@@ -695,32 +816,74 @@
             }
             
             // Function to handle file download with proper binary handling
-            async function downloadFile(url, format, quality) {
+            async function downloadFile(videoId, format, quality) {
                 try {
-                    // Construct download URL
-                    const downloadUrl = `/api/download/${format}?url=${encodeURIComponent(url)}&quality=${quality}`;
+                    // Construct download URL with RESTful pattern
+                    const endpoint = format === 'mp4' ? 'video' : 'audio';
+                    const downloadUrl = `/api/download/${endpoint}/${videoId}?quality=${quality}`;
                     
-                    // In a real implementation, this would be a fetch with blob response type
-                    // and setting up with the abort controller
+                    // Create a fetch request that properly handles binary data
+                    const response = await fetch(downloadUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': format === 'mp4' ? 'video/mp4' : 'audio/mpeg'
+                        },
+                        signal: downloadController.signal
+                    });
                     
-                    // Simulate server processing time
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    if (!response.ok) {
+                        let errorMessage = `Server error: ${response.status}`;
+                        try {
+                            const errorData = await response.json();
+                            if (errorData.message) {
+                                errorMessage = errorData.message;
+                            }
+                        } catch (e) {
+                            // If response is not JSON, use default error message
+                        }
+                        throw new Error(errorMessage);
+                    }
                     
-                    // Create a download link with proper attributes for binary file download
+                    // Get the blob from the response
+                    const blob = await response.blob();
+                    
+                    // Check if the response is actually a binary file
+                    const contentType = response.headers.get('Content-Type');
+                    if (
+                        (format === 'mp4' && !contentType.includes('video/')) || 
+                        (format === 'mp3' && !contentType.includes('audio/'))
+                    ) {
+                        throw new Error(`Invalid content type: ${contentType}. Expected ${format === 'mp4' ? 'video' : 'audio'} file.`);
+                    }
+                    
+                    // Create a URL for the blob
+                    const blobUrl = URL.createObjectURL(blob);
+                    
+                    // Generate filename from video title
+                    const fileName = generateFilename(videoTitle.textContent, format);
+                    
+                    // Create a temporary link and trigger the download
                     const a = document.createElement('a');
-                    a.href = downloadUrl;
-                    a.download = generateFilename(videoTitle.textContent, format);
+                    a.href = blobUrl;
+                    a.download = fileName;
+                    a.style.display = 'none';
                     
-                    // Trigger download
+                    // Add to document, click, and clean up
                     document.body.appendChild(a);
                     a.click();
-                    document.body.removeChild(a);
+                    
+                    // Clean up
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(blobUrl);
+                    }, 100);
                     
                     return true;
                 } catch (error) {
-                    if (downloadController && downloadController.signal.aborted) {
+                    if (downloadController?.signal.aborted) {
                         throw new Error('Download cancelled');
                     } else {
+                        console.error('Download failed:', error);
                         throw error;
                     }
                 }
@@ -729,7 +892,11 @@
             // Generate a sanitized filename
             function generateFilename(title, format) {
                 // Remove special characters and replace spaces with underscores
-                const sanitized = title.replace(/[^\w\s]/gi, '').replace(/\s+/g, '_');
+                const sanitized = (title || 'youtube_video')
+                    .replace(/[^\w\s]/gi, '')
+                    .replace(/\s+/g, '_')
+                    .substring(0, 100); // Limit length
+                
                 return `${sanitized}.${format}`;
             }
             
@@ -743,6 +910,11 @@
                 
                 if (downloadController) {
                     downloadController = null;
+                }
+                
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
                 }
             }
             
