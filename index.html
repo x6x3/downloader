@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Downloader</title>
+    <meta name="description" content="Download YouTube videos as MP4 or MP3 files with our modern, fast converter">
+    <link rel="stylesheet" href="css/styles.css">
+    <!-- Preload critical assets -->
+    <link rel="preload" href="fonts/SFPro-Regular.woff2" as="font" type="font/woff2" crossorigin>
+    <style>
+        :root {
+            --color-primary-brown: #5D4037;
+            --color-light-brown: #A1887F;
+            --color-white: #FAF9F6;
+            --color-error: #D32F2F;
+            --space-xs: 0.25rem;
+            --space-sm: 0.5rem;
+            --space-md: 1rem;
+            --space-lg: 2rem;
+            --border-radius: 8px;
+        }
+
+        /* Critical CSS for above-the-fold content */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--color-primary-brown);
+            color: var(--color-white);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: var(--space-lg);
+        }
+
+        .card {
+            background-color: var(--color-white);
+            color: var(--color-primary-brown);
+            border-radius: var(--border-radius);
+            padding: var(--space-lg);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-md) 0;
+        }
+
+        .tabs {
+            display: flex;
+            gap: var(--space-md);
+        }
+
+        .tab {
+            padding: var(--space-sm) var(--space-md);
+            cursor: pointer;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: var(--color-white);
+        }
+
+        .input-group {
+            margin: var(--space-lg) 0;
+        }
+
+        .input-field {
+            width: 100%;
+            padding: var(--space-md);
+            border: 2px solid var(--color-light-brown);
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .input-field:focus {
+            border-color: var(--color-primary-brown);
+            outline: none;
+            transform: scale(1.01);
+        }
+
+        .btn {
+            background-color: var(--color-primary-brown);
+            color: var(--color-white);
+            border: none;
+            border-radius: var(--border-radius);
+            padding: var(--space-md) var(--space-lg);
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-sm);
+        }
+
+        .btn:hover {
+            background-color: var(--color-light-brown);
+        }
+
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .preview {
+            display: none;
+            margin: var(--space-md) 0;
+            padding: var(--space-md);
+            border-radius: var(--border-radius);
+            background-color: rgba(93, 64, 55, 0.05);
+        }
+
+        .preview.visible {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+        }
+
+        .preview img {
+            width: 120px;
+            height: auto;
+            border-radius: var(--border-radius);
+        }
+
+        .footer {
+            margin-top: var(--space-lg);
+            text-align: center;
+            font-size: 0.875rem;
+        }
+
+        /* Animation toggle for accessibility */
+        .reduce-motion * {
+            animation: none !important;
+            transition: none !important;
+        }
+
+        /* Hide download button initially */
+        #downloadBtn {
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        #downloadBtn.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: var(--space-md);
+            }
+            
+            .preview {
+                flex-direction: column;
+            }
+            
+            .preview img {
+                width: 100%;
+                max-width: 240px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header container">
+        <div class="logo">
+            <h1>YouTube Downloader</h1>
+        </div>
+        <nav class="tabs">
+            <div class="tab active" data-format="mp4">MP4</div>
+            <div class="tab" data-format="mp3">MP3</div>
+        </nav>
+    </header>
+
+    <main class="container">
+        <div class="card">
+            <h2>Download YouTube Videos</h2>
+            <p>Paste a YouTube link below to convert and download as MP4 or MP3.</p>
+            
+            <div class="input-group">
+                <label for="youtubeUrl">YouTube URL</label>
+                <input type="url" id="youtubeUrl" class="input-field" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off">
+            </div>
+            
+            <div class="preview" id="videoPreview">
+                <img id="thumbnailPreview" alt="Video thumbnail">
+                <div class="preview-info">
+                    <h3 id="videoTitle">Video Title</h3>
+                    <p id="videoDuration">Duration: <span>00:00</span></p>
+                </div>
+            </div>
+            
+            <div class="advanced-settings">
+                <details>
+                    <summary>Advanced Settings</summary>
+                    <div class="settings-content">
+                        <div class="setting mp4-only">
+                            <label for="resolution">Resolution</label>
+                            <select id="resolution" class="input-field">
+                                <option value="1080">1080p</option>
+                                <option value="720" selected>720p</option>
+                                <option value="480">480p</option>
+                                <option value="360">360p</option>
+                            </select>
+                        </div>
+                        <div class="setting mp3-only" style="display: none;">
+                            <label for="bitrate">Bitrate</label>
+                            <select id="bitrate" class="input-field">
+                                <option value="320">320 kbps</option>
+                                <option value="256" selected>256 kbps</option>
+                                <option value="192">192 kbps</option>
+                                <option value="128">128 kbps</option>
+                            </select>
+                        </div>
+                    </div>
+                </details>
+            </div>
+            
+            <div class="download-container" style="text-align: center; margin-top: var(--space-lg);">
+                <button id="downloadBtn" class="btn" disabled>
+                    <span id="downloadBtnText">Download MP4</span>
+                    <span id="downloadSpinner" style="display: none;">
+                        <svg width="20" height="20" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" opacity="0.3"></circle>
+                            <path d="M12 2a10 10 0 0 1 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"></animateTransform>
+                            </path>
+                        </svg>
+                    </span>
+                </button>
+            </div>
+        </div>
+        
+        <div class="accessibility-controls" style="text-align: center; margin-top: var(--space-md);">
+            <button id="reduceMotionToggle" class="btn" style="background-color: transparent; color: var(--color-white); border: 1px solid var(--color-white);">
+                Reduce Motion
+            </button>
+        </div>
+    </main>
+
+    <footer class="footer container">
+        <p>© 2023 YouTube Downloader. All rights reserved.</p>
+        <div class="footer-links">
+            <a href="/terms">Terms of Service</a> | 
+            <a href="/privacy">Privacy Policy</a> | 
+            <a href="mailto:contact@example.com">Contact</a>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlInput = document.getElementById('youtubeUrl');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const downloadBtnText = document.getElementById('downloadBtnText');
+            const downloadSpinner = document.getElementById('downloadSpinner');
+            const videoPreview = document.getElementById('videoPreview');
+            const thumbnailPreview = document.getElementById('thumbnailPreview');
+            const videoTitle = document.getElementById('videoTitle');
+            const tabs = document.querySelectorAll('.tab');
+            const mp4Settings = document.querySelector('.mp4-only');
+            const mp3Settings = document.querySelector('.mp3-only');
+            const reduceMotionToggle = document.getElementById('reduceMotionToggle');
+            
+            let currentFormat = 'mp4';
+            
+            // Tab switching
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    currentFormat = tab.dataset.format;
+                    downloadBtnText.textContent = `Download ${currentFormat.toUpperCase()}`;
+                    
+                    // Toggle advanced settings based on format
+                    if (currentFormat === 'mp4') {
+                        mp4Settings.style.display = 'block';
+                        mp3Settings.style.display = 'none';
+                    } else {
+                        mp4Settings.style.display = 'none';
+                        mp3Settings.style.display = 'block';
+                    }
+                });
+            });
+            
+            // URL validation and preview
+            urlInput.addEventListener('input', debounce(validateAndPreview, 500));
+            
+            function validateAndPreview() {
+                const url = urlInput.value.trim();
+                const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;
+                
+                if (youtubeRegex.test(url)) {
+                    // Simulate fetching video info
+                    fetchVideoInfo(url)
+                        .then(info => {
+                            // Show preview
+                            thumbnailPreview.src = info.thumbnail;
+                            videoTitle.textContent = info.title;
+                            videoPreview.classList.add('visible');
+                            
+                            // Enable download button
+                            downloadBtn.disabled = false;
+                            downloadBtn.classList.add('visible');
+                        })
+                        .catch(error => {
+                            console.error('Error fetching video info:', error);
+                            videoPreview.classList.remove('visible');
+                            downloadBtn.disabled = true;
+                            downloadBtn.classList.remove('visible');
+                        });
+                } else {
+                    videoPreview.classList.remove('visible');
+                    downloadBtn.disabled = true;
+                    downloadBtn.classList.remove('visible');
+                }
+            }
+            
+            // Mock function to simulate fetching video info
+            function fetchVideoInfo(url) {
+                return new Promise((resolve, reject) => {
+                    // In a real app, this would be an API call
+                    setTimeout(() => {
+                        if (url.includes('youtube.com') || url.includes('youtu.be')) {
+                            resolve({
+                                title: 'Sample YouTube Video',
+                                thumbnail: 'https://via.placeholder.com/480x360',
+                                duration: '10:30'
+                            });
+                        } else {
+                            reject(new Error('Invalid YouTube URL'));
+                        }
+                    }, 800);
+                });
+            }
+            
+            // Download button click handler
+            downloadBtn.addEventListener('click', () => {
+                const url = urlInput.value.trim();
+                const format = currentFormat;
+                const resolution = document.getElementById('resolution').value;
+                const bitrate = document.getElementById('bitrate').value;
+                
+                // Show loading state
+                downloadBtn.disabled = true;
+                downloadBtnText.textContent = `Processing...`;
+                downloadSpinner.style.display = 'inline-block';
+                
+                // Simulate download process
+                initiateDownload(url, format, format === 'mp4' ? resolution : bitrate)
+                    .then(downloadUrl => {
+                        // Create temporary link and trigger download
+                        const a = document.createElement('a');
+                        a.href = downloadUrl;
+                        a.download = `youtube-video.${format}`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        
+                        // Reset button state
+                        downloadBtn.disabled = false;
+                        downloadBtnText.textContent = `Download ${format.toUpperCase()}`;
+                        downloadSpinner.style.display = 'none';
+                    })
+                    .catch(error => {
+                        console.error('Download error:', error);
+                        alert('Download failed. Please try again.');
+                        
+                        // Reset button state
+                        downloadBtn.disabled = false;
+                        downloadBtnText.textContent = `Download ${format.toUpperCase()}`;
+                        downloadSpinner.style.display = 'none';
+                    });
+            });
+            
+            // Mock function to simulate download process
+            function initiateDownload(url, format, quality) {
+                return new Promise((resolve, reject) => {
+                    // In a real app, this would be an API call
+                    setTimeout(() => {
+                        // This would be a real download URL from the server
+                        resolve(`/api/download/${format}?url=${encodeURIComponent(url)}&quality=${quality}`);
+                    }, 2000);
+                });
+            }
+            
+            // Reduce motion toggle
+            reduceMotionToggle.addEventListener('click', () => {
+                document.body.classList.toggle('reduce-motion');
+                reduceMotionToggle.textContent = document.body.classList.contains('reduce-motion') 
+                    ? 'Enable Motion' 
+                    : 'Reduce Motion';
+            });
+            
+            // Utility function for debouncing
+            function debounce(func, wait) {
+                let timeout;
+                return function(...args) {
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => func.apply(this, args), wait);
+                };
+            }
+        });
+    </script>
+</body>
+</html>
